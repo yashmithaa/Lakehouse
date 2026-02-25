@@ -1,0 +1,131 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Incremental Data Lakehouse — Docker Compose (Week 1)
+#
+# Services: Kafka (KRaft), Spark (master + worker), MinIO (S3-compatible store)
+# One-command start:  docker compose up -d --build
+# One-command stop:   docker compose down -v
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Kafka (KRaft mode — no ZooKeeper) ────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    container_name: lakehouse-kafka
+    ports:
+      - "9092:9092"     # external clients (producer, Spark)
+      - "9093:9093"     # controller
+    environment:
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENERS: "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://0.0.0.0:9092,CONTROLLER://kafka:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_NUM_PARTITIONS: "3"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - lakehouse
+
+  # ── MinIO (S3-compatible object storage) ─────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: lakehouse-minio
+    ports:
+      - "9000:9000"     # S3 API
+      - "9001:9001"     # Web console
+    environment:
+      MINIO_ROOT_USER: "minioadmin"
+      MINIO_ROOT_PASSWORD: "minioadmin"
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - lakehouse
+
+  # ── MinIO bucket initializer ─────────────────────────────────────────────
+  minio-init:
+    image: minio/mc:latest
+    container_name: lakehouse-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set myminio http://minio:9000 minioadmin minioadmin;
+        mc mb --ignore-existing myminio/lakehouse;
+        mc mb --ignore-existing myminio/lakehouse-checkpoints;
+        echo 'Buckets ready.';
+      "
+    networks:
+      - lakehouse
+
+  # ── Spark Master ─────────────────────────────────────────────────────────
+  spark-master:
+    build:
+      context: ./docker/spark
+      dockerfile: Dockerfile
+    container_name: lakehouse-spark-master
+    ports:
+      - "8080:8080"     # Spark master web UI
+      - "7077:7077"     # Spark master RPC
+      - "4040:4040"     # Application UI (driver)
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master", "--host", "spark-master", "--port", "7077", "--webui-port", "8080"]
+    volumes:
+      - ./spark-jobs:/opt/spark-jobs
+      - ./conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -lc '</dev/tcp/localhost/8080' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - lakehouse
+
+  # ── Spark Worker ─────────────────────────────────────────────────────────
+  spark-worker:
+    build:
+      context: ./docker/spark
+      dockerfile: Dockerfile
+    container_name: lakehouse-spark-worker
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "--webui-port", "8081", "--cores", "2", "--memory", "2g", "spark://spark-master:7077"]
+    ports:
+      - "8081:8081"     # Worker web UI
+    volumes:
+      - ./spark-jobs:/opt/spark-jobs
+      - ./conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+    networks:
+      - lakehouse
+
+volumes:
+  kafka-data:
+  minio-data:
+
+networks:
+  lakehouse:
+    driver: bridge

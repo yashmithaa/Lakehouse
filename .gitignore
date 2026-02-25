@@ -1,0 +1,43 @@
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+*.egg
+
+# Java / Spark
+*.class
+*.jar
+target/
+.metals/
+.bloop/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+docs/
+
+# Docker volumes (not committed)
+docker-volumes/
+
+# Dataset (downloaded at runtime)
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Checkpoints (generated at runtime)
+checkpoints/
+
+# Spark event logs
+spark-events/
