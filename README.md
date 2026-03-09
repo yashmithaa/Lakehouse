@@ -2,7 +2,7 @@
 
 A modern **Data Lakehouse** pipeline combining real-time streaming ingestion (Kafka → Spark) with ACID-compliant transactional storage (Apache Hudi) on S3-compatible object storage (MinIO).
 
-## Architecture
+## Flow
 
 ```
 Olist CSV → Replay Producer (Python) → Kafka (KRaft) → Spark Structured Streaming → Hudi → MinIO
@@ -62,11 +62,46 @@ The consumer reads from Kafka, parses JSON, runs quality checks, and prints vali
 ```
 
 The pipeline reads from Kafka, applies 6 quality checks, routes bad records to quarantine, deduplicates valid records by `order_id`, and writes three layers to MinIO as Parquet:
-- **Bronze** (`s3a://lakehouse/bronze/orders/`) — all records, raw audit zone
-- **Silver** (`s3a://lakehouse/silver/orders/`) — validated + deduplicated, analytics-ready
-- **Quarantine** (`s3a://lakehouse/bronze/quarantine/`) — failed QC records with failure reasons
+- **Bronze** (`s3a://lakehouse/bronze/orders/`)  all records, raw audit zone
+- **Silver** (`s3a://lakehouse/silver/orders/`)  validated + deduplicated, analytics-ready
+- **Quarantine** (`s3a://lakehouse/bronze/quarantine/`)  failed QC records with failure reasons
 
 Per-batch quality metrics are written to `s3a://lakehouse/metrics/quality/`.
+
+#### Hudi ACID Pipeline 
+
+```bash
+./scripts/submit_streaming.sh --hudi       # foreground (Ctrl+C to stop)
+./scripts/submit_streaming.sh --hudi-bg    # background (detached)
+```
+
+The Hudi pipeline upgrades silver to an **ACID-compliant Hudi table** with:
+- **Upsert dedup** : cross-batch deduplication via `order_id` record key + `event_time` precombine
+- **Time-travel** : query any historical snapshot via the Hudi commit timeline
+- **Incremental reads** : pull only new/changed records since a given commit (CDC pattern)
+- **Schema evolution** : add nullable columns without rewriting data or restarting the pipeline
+
+Output layers:
+- **Bronze** (`s3a://lakehouse/bronze/orders/`) : Parquet (raw audit)
+- **Silver (Hudi)** (`s3a://lakehouse/hudi/silver/orders/`) : CoW upsert table
+- **Quarantine** (`s3a://lakehouse/bronze/quarantine/`) : Parquet (failed QC)
+
+#### Hudi Query Examples
+
+```bash
+./scripts/submit_streaming.sh --queries               # all demos
+./scripts/submit_streaming.sh --queries upsert         # upsert verification only
+./scripts/submit_streaming.sh --queries timetravel     # time-travel only
+./scripts/submit_streaming.sh --queries incremental    # incremental reads only
+```
+
+#### Schema Evolution Demo
+
+```bash
+./scripts/submit_streaming.sh --schema
+```
+
+Adds `review_score` and `delivery_delay_days` columns to the Hudi table, demonstrating backward-compatible schema evolution.
 
 View quality dashboard:
 
@@ -113,15 +148,18 @@ Stop the streaming pipeline:
 │   ├── event_producer.py           # Olist dataset replay producer
 │   └── requirements.txt            # Python dependencies
 ├── spark-jobs/
-│   ├── bronze_streaming_consumer.py  # Week 1: Kafka → console (debug)
-│   ├── pipeline_utils.py             # Week 2: shared schema, QC, paths
-│   ├── streaming_pipeline.py         # Week 2: Kafka → Bronze + Silver + Quarantine
-│   └── quality_dashboard.py          # Week 2: quality metrics report
+│   ├── bronze_streaming_consumer.py  # Kafka → console (debug)
+│   ├── pipeline_utils.py             # Shared schema, QC, paths, Hudi config
+│   ├── streaming_pipeline.py         
+│   ├── hudi_streaming_pipeline.py    
+│   ├── hudi_query_examples.py        
+│   ├── schema_evolution.py           
+│   └── quality_dashboard.py          
 ├── scripts/
 │   ├── start.sh                    # One-command startup
 │   ├── stop.sh                     # One-command teardown
 │   ├── status.sh                   # Health check
 │   ├── download_dataset.sh         # Download Olist dataset
-│   └── submit_streaming.sh         # submit/stop streaming pipeline
+│   └── submit_streaming.sh         # Submit/stop pipeline 
 ```
 

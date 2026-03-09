@@ -49,11 +49,66 @@ SILVER_PATH      = "s3a://lakehouse/silver/orders/"
 QUARANTINE_PATH  = "s3a://lakehouse/bronze/quarantine/"
 METRICS_PATH     = "s3a://lakehouse/metrics/quality/"
 
+# Hudi Silver table path (ACID upserts — Week 3)
+HUDI_SILVER_PATH = "s3a://lakehouse/hudi/silver/orders/"
+
 # Checkpoint paths (separate bucket for clean lifecycle) 
 BRONZE_CHECKPOINT     = "s3a://lakehouse-checkpoints/bronze/orders/"
 SILVER_CHECKPOINT     = "s3a://lakehouse-checkpoints/silver/orders/"
 QUARANTINE_CHECKPOINT = "s3a://lakehouse-checkpoints/silver/quarantine/"
 PIPELINE_CHECKPOINT   = "s3a://lakehouse-checkpoints/pipeline/"
+HUDI_PIPELINE_CHECKPOINT = "s3a://lakehouse-checkpoints/hudi-pipeline/"
+
+# Matches the data contract: order_id as record key, event_time as
+# precombine field, customer_state as partition path.
+HUDI_TABLE_NAME = "orders_silver"
+HUDI_DATABASE   = "lakehouse_db"
+
+HUDI_COMMON_OPTS = {
+    "hoodie.table.name":                          HUDI_TABLE_NAME,
+    "hoodie.database.name":                       HUDI_DATABASE,
+
+    "hoodie.datasource.write.recordkey.field":    "order_id",
+    "hoodie.datasource.write.precombine.field":   "event_time",
+    "hoodie.datasource.write.partitionpath.field": "customer_state",
+
+    "hoodie.datasource.write.operation":          "upsert",
+    "hoodie.datasource.write.table.type":         "COPY_ON_WRITE",
+
+    "hoodie.index.type":                          "BLOOM",
+    "hoodie.bloom.index.update.partition.path":   "true",
+
+    "hoodie.upsert.shuffle.parallelism":          "4",
+    "hoodie.insert.shuffle.parallelism":          "4",
+
+    "hoodie.parquet.max.file.size":               str(128 * 1024 * 1024),  # 128 MB
+    "hoodie.parquet.small.file.limit":            str(64 * 1024 * 1024),   # 64 MB
+
+    # Inline compaction (CoW doesn't need MOR log compaction but
+    # clustering can be triggered manually via maintenance jobs)
+    "hoodie.compact.inline":                      "false",
+
+    # Cleaner — keep 3 prior commits for time-travel queries
+    "hoodie.cleaner.policy":                      "KEEP_LATEST_COMMITS",
+    "hoodie.cleaner.commits.retained":            "10",
+
+    "hoodie.keep.min.commits":                    "15",
+    "hoodie.keep.max.commits":                    "20",
+
+    "hoodie.datasource.write.reconcile.schema":   "true",
+    "hoodie.schema.on.read.enable":               "true",
+}
+
+HUDI_INCREMENTAL_OPTS = {
+    "hoodie.datasource.query.type": "incremental",
+}
+
+def hudi_time_travel_opts(instant_time: str) -> dict:
+    """Return Hudi read options for a point-in-time snapshot query."""
+    return {
+        "hoodie.datasource.query.type":          "snapshot",
+        "as.of.instant":                         instant_time,
+    }
 
 
 def parse_kafka_stream(raw_stream: DataFrame) -> DataFrame:

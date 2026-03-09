@@ -2,17 +2,21 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
 
-METRICS_PATH = "s3a://lakehouse/metrics/quality/"
-BRONZE_PATH  = "s3a://lakehouse/bronze/orders/"
-SILVER_PATH  = "s3a://lakehouse/silver/orders/"
+METRICS_PATH    = "s3a://lakehouse/metrics/quality/"
+BRONZE_PATH     = "s3a://lakehouse/bronze/orders/"
+SILVER_PATH     = "s3a://lakehouse/silver/orders/"
+HUDI_SILVER_PATH = "s3a://lakehouse/hudi/silver/orders/"
 QUARANTINE_PATH = "s3a://lakehouse/bronze/quarantine/"
 
 
 def main():
     spark = (
         SparkSession.builder
-        .appName("QualityDashboard_Week2")
+        .appName("QualityDashboard_Week3")
         .config("spark.sql.shuffle.partitions", "4")
+        .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+        .config("spark.sql.extensions", "org.apache.spark.sql.hudi.HoodieSparkSessionExtension")
+        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.hudi.catalog.HoodieCatalog")
         .getOrCreate()
     )
     spark.sparkContext.setLogLevel("WARN")
@@ -95,23 +99,67 @@ def main():
     print("  LAYER RECORD COUNTS")
     print(sep)
 
-    for label, path in [
-        ("Bronze",     BRONZE_PATH),
-        ("Silver",     SILVER_PATH),
-        ("Quarantine", QUARANTINE_PATH),
+    for label, path, fmt in [
+        ("Bronze",        BRONZE_PATH,      "parquet"),
+        ("Silver (Prq)",  SILVER_PATH,      "parquet"),
+        ("Silver (Hudi)", HUDI_SILVER_PATH, "hudi"),
+        ("Quarantine",    QUARANTINE_PATH,  "parquet"),
     ]:
         try:
-            count = spark.read.parquet(path).count()
-            print(f"  {label:15s}  {count:>10,} records")
+            if fmt == "hudi":
+                count = spark.read.format("hudi").load(path).count()
+            else:
+                count = spark.read.parquet(path).count()
+            print(f"  {label:18s}  {count:>10,} records")
         except Exception:
-            print(f"  {label:15s}  (no data yet)")
+            print(f"  {label:18s}  (no data yet)")
+
+    # ── Hudi commit timeline ──────────────────────────────────────────
+    print(f"\n{sep}")
+    print("  HUDI SILVER — COMMIT TIMELINE")
+    print(sep)
+
+    try:
+        hudi_silver = spark.read.format("hudi").load(HUDI_SILVER_PATH)
+        timeline = (
+            hudi_silver
+            .groupBy("_hoodie_commit_time")
+            .agg(F.count("*").alias("records"))
+            .orderBy("_hoodie_commit_time")
+        )
+        commit_count = timeline.count()
+        print(f"\n  Total commits: {commit_count}")
+        timeline.show(50, truncate=False)
+
+        # Unique order_ids (proves upsert dedup)
+        unique_orders = hudi_silver.select("order_id").distinct().count()
+        total_rows = hudi_silver.count()
+        print(f"  Total rows:        {total_rows:,}")
+        print(f"  Unique order_ids:  {unique_orders:,}")
+        print(f"  Upsert dedup OK:   {'YES ✓' if total_rows == unique_orders else 'NO ✗'}")
+    except Exception:
+        print("  (no Hudi silver data yet — run hudi_streaming_pipeline first)")
 
     print(f"\n{sep}")
     print("  SILVER DATA SAMPLE (latest 10 records by event_ts)")
     print(sep)
 
+    # Prefer Hudi silver, fall back to Parquet silver
+    silver_read = False
     try:
-        silver = spark.read.parquet(SILVER_PATH)
+        silver = spark.read.format("hudi").load(HUDI_SILVER_PATH)
+        silver_read = True
+        print("  (reading from Hudi silver)")
+    except Exception:
+        try:
+            silver = spark.read.parquet(SILVER_PATH)
+            silver_read = True
+            print("  (reading from Parquet silver — Hudi not available)")
+        except Exception:
+            pass
+
+    if silver_read:
+    if silver_read:
         (
             silver
             .orderBy(F.col("event_ts").desc())
@@ -121,7 +169,7 @@ def main():
             )
             .show(10, truncate=False)
         )
-    except Exception:
+    else:
         print("  (no silver data yet)\n")
 
     print(f"\n{sep}")
