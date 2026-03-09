@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# ─────────────────────────────────────────────────────────────────────────────
 # start.sh — One-command startup for the Incremental Data Lakehouse
-# ─────────────────────────────────────────────────────────────────────────────
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,11 +17,11 @@ echo -e "${CYAN}╚════════════════════�
 
 cd "$PROJECT_DIR"
 
-# ── Build & start all services ───────────────────────────────────────────────
+# Build & start all services 
 echo -e "\n${YELLOW}[1/3]${NC} Building Docker images and starting services…"
 docker compose up -d --build
 
-# ── Wait for health checks ──────────────────────────────────────────────────
+# Wait for health checks 
 echo -e "\n${YELLOW}[2/3]${NC} Waiting for services to become healthy…"
 
 wait_for_service() {
@@ -48,7 +47,7 @@ wait_for_service "kafka"        90
 wait_for_service "minio"        30
 wait_for_service "spark-master" 60
 
-# ── Create Kafka topic explicitly (idempotent) ──────────────────────────────
+#  Create Kafka topic explicitly (idempotent)
 echo -e "\n${YELLOW}[3/3]${NC} Ensuring Kafka topic 'orders' exists…"
 docker exec lakehouse-kafka kafka-topics \
     --bootstrap-server localhost:9092 \
@@ -59,7 +58,6 @@ docker exec lakehouse-kafka kafka-topics \
 
 echo -e "  orders                ${GREEN}✓ ready${NC}"
 
-# ── Summary ──────────────────────────────────────────────────────────────────
 echo -e "\n${GREEN}╔════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║   All services are up!                                 ║${NC}"
 echo -e "${GREEN}╚════════════════════════════════════════════════════════╝${NC}"
@@ -71,7 +69,14 @@ echo -e "  ${CYAN}Spark Master${NC}   → http://localhost:8080"
 echo -e "  ${CYAN}Spark Worker${NC}   → http://localhost:8081"
 echo ""
 echo -e "  ${YELLOW}Next steps:${NC}"
-echo -e "    1. Download dataset: ./scripts/download_dataset.sh"
-echo -e "    2. Start producer:   cd producer && pip install -r requirements.txt && python event_producer.py"
-echo -e "    3. Start consumer:   docker exec lakehouse-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 /opt/spark-jobs/bronze_streaming_consumer.py"
+echo -e "    1. Download dataset:     ./scripts/download_dataset.sh"
+echo -e "    2. Start producer:       cd producer && pip install -r requirements.txt && python event_producer.py"
+echo -e ""
+echo -e "  ${YELLOW} Console consumer (debug):${NC}"
+echo -e "    3a. docker exec lakehouse-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 /opt/spark-jobs/bronze_streaming_consumer.py"
+echo -e ""
+echo -e "  ${YELLOW} Streaming pipeline (Kafka → Bronze + Silver + Quarantine):${NC}"
+echo -e "    3b. ./scripts/submit_streaming.sh            # foreground"
+echo -e "    3b. ./scripts/submit_streaming.sh --bg       # background"
+echo -e "    4.  ./scripts/submit_streaming.sh --dashboard  # quality metrics"
 echo ""

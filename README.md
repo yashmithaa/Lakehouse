@@ -8,8 +8,6 @@ A modern **Data Lakehouse** pipeline combining real-time streaming ingestion (Ka
 Olist CSV → Replay Producer (Python) → Kafka (KRaft) → Spark Structured Streaming → Hudi → MinIO
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full diagrams and port mappings.
-
 ---
 
 ## Quick Start
@@ -58,6 +56,29 @@ docker exec lakehouse-spark-master /opt/spark/bin/spark-submit --master spark://
 ```
 
 The consumer reads from Kafka, parses JSON, runs quality checks, and prints valid/quarantined records to the console.
+```bash
+./scripts/submit_streaming.sh          # foreground (Ctrl+C to stop)
+./scripts/submit_streaming.sh --bg     # background (detached)
+```
+
+The pipeline reads from Kafka, applies 6 quality checks, routes bad records to quarantine, deduplicates valid records by `order_id`, and writes three layers to MinIO as Parquet:
+- **Bronze** (`s3a://lakehouse/bronze/orders/`) — all records, raw audit zone
+- **Silver** (`s3a://lakehouse/silver/orders/`) — validated + deduplicated, analytics-ready
+- **Quarantine** (`s3a://lakehouse/bronze/quarantine/`) — failed QC records with failure reasons
+
+Per-batch quality metrics are written to `s3a://lakehouse/metrics/quality/`.
+
+View quality dashboard:
+
+```bash
+./scripts/submit_streaming.sh --dashboard
+```
+
+Stop the streaming pipeline:
+
+```bash
+./scripts/submit_streaming.sh --stop
+```
 
 ### 6. Stop everything
 
@@ -87,21 +108,20 @@ The consumer reads from Kafka, parses JSON, runs quality checks, and prints vali
 ├── docker-compose.yml              # Full stack definition
 ├── docker/spark/Dockerfile         # Spark image + Hudi/Kafka/S3 JARs
 ├── conf/spark-defaults.conf        # Spark config (Hudi, S3, tuning)
-├── data/olist/                        # Olist CSV files (downloaded, git-ignored)
+├── data/olist/                     # Olist CSV files (downloaded, git-ignored)
 ├── producer/
 │   ├── event_producer.py           # Olist dataset replay producer
 │   └── requirements.txt            # Python dependencies
 ├── spark-jobs/
-│   └── bronze_streaming_consumer.py  # Kafka → parse → quality check → console
+│   ├── bronze_streaming_consumer.py  # Week 1: Kafka → console (debug)
+│   ├── pipeline_utils.py             # Week 2: shared schema, QC, paths
+│   ├── streaming_pipeline.py         # Week 2: Kafka → Bronze + Silver + Quarantine
+│   └── quality_dashboard.py          # Week 2: quality metrics report
 ├── scripts/
 │   ├── start.sh                    # One-command startup
 │   ├── stop.sh                     # One-command teardown
 │   ├── status.sh                   # Health check
-│   └── download_dataset.sh         # Download Olist dataset
-├── docs/
-│   ├── ARCHITECTURE.md             # Architecture diagrams (Mermaid)
-│   └── DATA_CONTRACT.md            # Event schema & design decisions
-├── PROJECT_OVERVIEW.md             # Project vision
-└── ROADMAP.md                      # 5-week implementation plan
+│   ├── download_dataset.sh         # Download Olist dataset
+│   └── submit_streaming.sh         # submit/stop streaming pipeline
 ```
 

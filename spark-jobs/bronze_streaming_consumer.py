@@ -1,15 +1,3 @@
-"""
-Bronze Streaming Consumer — Kafka → Console (Week 1)
-=====================================================
-Reads order events from Kafka (replayed from the Brazilian E-Commerce / Olist
-dataset), parses JSON, applies basic quality checks, and prints validated +
-quarantined records to the console.
-
-Submit:
-    /opt/spark/bin/spark-submit --master spark://spark-master:7077 \
-        /opt/spark-jobs/bronze_streaming_consumer.py
-"""
-
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
@@ -17,7 +5,6 @@ from pyspark.sql.types import (
     IntegerType, BooleanType,
 )
 
-# ── Schema matching the Olist replay event contract ─────────────────────────
 ORDER_SCHEMA = StructType([
     StructField("order_id",           StringType(),  nullable=False),
     StructField("customer_id",        StringType(),  nullable=False),
@@ -39,7 +26,6 @@ ORDER_SCHEMA = StructType([
     StructField("processing_time",    StringType(),  nullable=True),
 ])
 
-# ── Quality-check reference values ──────────────────────────────────────────
 VALID_STATUSES = ["created", "confirmed", "shipped", "delivered", "cancelled"]
 
 VALID_STATES = [
@@ -58,7 +44,6 @@ def main():
     )
     spark.sparkContext.setLogLevel("WARN")
 
-    # ── Read from Kafka ──────────────────────────────────────────────────────
     raw_stream = (
         spark.readStream
         .format("kafka")
@@ -69,7 +54,6 @@ def main():
         .load()
     )
 
-    # ── Parse JSON payload ───────────────────────────────────────────────────
     parsed = (
         raw_stream
         .selectExpr(
@@ -82,13 +66,11 @@ def main():
         .select("msg_key", "kafka_ts", "topic", "partition", "offset", "data.*")
     )
 
-    # ── Cast event_time to timestamp ─────────────────────────────────────────
     parsed = parsed.withColumn(
         "event_ts",
         F.to_timestamp("event_time", "yyyy-MM-dd'T'HH:mm:ss'Z'"),
     )
 
-    # ── Quality checks ───────────────────────────────────────────────────────
     quality_checked = (
         parsed
         .withColumn("qc_has_order_id",      F.col("order_id").isNotNull())
@@ -110,11 +92,9 @@ def main():
         )
     )
 
-    # ── Separate valid and quarantined records ───────────────────────────────
     valid_records = quality_checked.filter(F.col("is_valid") == True)
     quarantine_records = quality_checked.filter(F.col("is_valid") == False)
 
-    # ── Write valid records to console ───────────────────────────────────────
     valid_query = (
         valid_records
         .select(
@@ -132,7 +112,6 @@ def main():
         .start()
     )
 
-    # ── Write quarantined records to console ─────────────────────────────────
     quarantine_query = (
         quarantine_records
         .select(
@@ -150,7 +129,6 @@ def main():
         .start()
     )
 
-    # ── Await termination ────────────────────────────────────────────────────
     spark.streams.awaitAnyTermination()
 
 
