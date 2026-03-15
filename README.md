@@ -1,6 +1,6 @@
-# Incremental Data Lakehouse [ACID & Time Travel]
+# Incremental Data Lakehouse 
 
-A modern **Data Lakehouse** pipeline combining real-time streaming ingestion (Kafka → Spark) with ACID-compliant transactional storage (Apache Hudi) on S3-compatible object storage (MinIO).
+A modern **Data Lakehouse** pipeline combining real-time streaming ingestion with ACID-compliant transactional storage (Apache Hudi) on S3-compatible object storage (MinIO).
 
 ## Flow
 
