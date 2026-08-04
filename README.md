@@ -1,21 +1,17 @@
-# Incremental Data Lakehouse 
+# Data Lakehouse 
 
 A modern **Data Lakehouse** pipeline combining real-time streaming ingestion with ACID-compliant transactional storage (Apache Hudi) on S3-compatible object storage (MinIO).
 
-## Flow
+<!--## Flow
 
 ```
 Olist CSV → Replay Producer (Python) → Kafka (KRaft) → Spark Structured Streaming → Hudi → MinIO
 ```
+-->
 
----
+
 
 ## Quick Start
-
-### Prerequisites
-
-- **Docker** ≥ 24.0 and **Docker Compose** v2
-- **Python** ≥ 3.10 (for the producer)
 
 ### 1. Start all services
 
@@ -71,7 +67,7 @@ Per-batch quality metrics are written to `s3a://lakehouse/metrics/quality/`.
 #### Hudi ACID Pipeline 
 
 ```bash
-./scripts/submit_streaming.sh --hudi       # foreground (Ctrl+C to stop)
+./scripts/submit_streaming.sh --hudi       
 ./scripts/submit_streaming.sh --hudi-bg    # background (detached)
 ```
 
@@ -121,6 +117,7 @@ Stop the streaming pipeline:
 ./scripts/stop.sh
 ```
 
+<!-- 
 ---
 
 ## Service Endpoints
@@ -134,32 +131,5 @@ Stop the streaming pipeline:
 | Spark Worker   | `http://localhost:8081`     | —                      |
 | Spark Driver   | `http://localhost:4040`     | —                      |
 
----
-
-## Project Structure
-
-```
-.
-├── docker-compose.yml              # Full stack definition
-├── docker/spark/Dockerfile         # Spark image + Hudi/Kafka/S3 JARs
-├── conf/spark-defaults.conf        # Spark config (Hudi, S3, tuning)
-├── data/olist/                     # Olist CSV files (downloaded, git-ignored)
-├── producer/
-│   ├── event_producer.py           # Olist dataset replay producer
-│   └── requirements.txt            # Python dependencies
-├── spark-jobs/
-│   ├── bronze_streaming_consumer.py  # Kafka → console (debug)
-│   ├── pipeline_utils.py             # Shared schema, QC, paths, Hudi config
-│   ├── streaming_pipeline.py         
-│   ├── hudi_streaming_pipeline.py    
-│   ├── hudi_query_examples.py        
-│   ├── schema_evolution.py           
-│   └── quality_dashboard.py          
-├── scripts/
-│   ├── start.sh                    # One-command startup
-│   ├── stop.sh                     # One-command teardown
-│   ├── status.sh                   # Health check
-│   ├── download_dataset.sh         # Download Olist dataset
-│   └── submit_streaming.sh         # Submit/stop pipeline 
-```
+-->
 
