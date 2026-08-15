@@ -9,6 +9,10 @@
 #   ./scripts/submit_streaming.sh --dashboard  # run quality dashboard
 #   ./scripts/submit_streaming.sh --queries    # run Hudi query examples 
 #   ./scripts/submit_streaming.sh --schema     # run schema evolution demo
+#   ./scripts/submit_streaming.sh --gold       # build Gold layer aggregations 
+#   ./scripts/submit_streaming.sh --analytics  # run BI analytics queries  
+#   ./scripts/submit_streaming.sh --trino-sql  # print Trino-compatible SQL 
+#   ./scripts/submit_streaming.sh --maintenance # run Hudi maintenance jobs 
 #   ./scripts/submit_streaming.sh --stop       # stop the running pipeline
 
 set -euo pipefail
@@ -107,7 +111,6 @@ stop_pipeline() {
     echo -e "${GREEN}Pipeline stopped.${NC}"
 }
 
-# Submit the Hudi streaming pipeline (Week 3) 
 submit_hudi_pipeline() {
     local mode=$1  # "fg" or "bg"
 
@@ -206,6 +209,80 @@ run_schema_evolution() {
             /opt/spark-jobs/schema_evolution.py
 }
 
+run_gold_aggregations() {
+    local mode="${1:-all}"
+
+    check_cluster
+
+    echo -e "${CYAN}╔════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║   Gold Layer Aggregation                               ║${NC}"
+    echo -e "${CYAN}╚════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    docker exec "$CONTAINER" \
+        /opt/spark/bin/spark-submit \
+            --master "$MASTER" \
+            --deploy-mode client \
+            --driver-memory 512m \
+            --executor-memory 1g \
+            --executor-cores 2 \
+            --conf spark.sql.shuffle.partitions=4 \
+            --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
+            --conf spark.sql.extensions=org.apache.spark.sql.hudi.HoodieSparkSessionExtension \
+            --conf spark.sql.catalog.spark_catalog=org.apache.spark.sql.hudi.catalog.HoodieCatalog \
+            --conf "spark.hadoop.hive.metastore.uris=thrift://hive-metastore:9083" \
+            --py-files /opt/spark-jobs/pipeline_utils.py \
+            /opt/spark-jobs/gold_aggregations.py --mode "$mode"
+}
+
+run_analytics_queries() {
+    local engine="${1:-spark}"
+
+    check_cluster
+
+    echo -e "${CYAN}╔════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║   BI Analytics Queries                                 ║${NC}"
+    echo -e "${CYAN}╚════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    docker exec "$CONTAINER" \
+        /opt/spark/bin/spark-submit \
+            --master "$MASTER" \
+            --deploy-mode client \
+            --driver-memory 512m \
+            --conf spark.sql.shuffle.partitions=4 \
+            --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
+            --conf spark.sql.extensions=org.apache.spark.sql.hudi.HoodieSparkSessionExtension \
+            --conf spark.sql.catalog.spark_catalog=org.apache.spark.sql.hudi.catalog.HoodieCatalog \
+            --conf "spark.hadoop.hive.metastore.uris=thrift://hive-metastore:9083" \
+            --py-files /opt/spark-jobs/pipeline_utils.py \
+            /opt/spark-jobs/analytics_queries.py --engine "$engine"
+}
+
+run_maintenance() {
+    local operation="${1:-all}"
+
+    check_cluster
+
+    echo -e "${CYAN}╔════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║   Hudi Maintenance Jobs                                ║${NC}"
+    echo -e "${CYAN}╚════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    docker exec "$CONTAINER" \
+        /opt/spark/bin/spark-submit \
+            --master "$MASTER" \
+            --deploy-mode client \
+            --driver-memory 512m \
+            --conf spark.sql.shuffle.partitions=4 \
+            --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
+            --conf spark.sql.extensions=org.apache.spark.sql.hudi.HoodieSparkSessionExtension \
+            --conf spark.sql.catalog.spark_catalog=org.apache.spark.sql.hudi.catalog.HoodieCatalog \
+            --conf "spark.hadoop.hive.metastore.uris=thrift://hive-metastore:9083" \
+            --py-files /opt/spark-jobs/pipeline_utils.py \
+            /opt/spark-jobs/hudi_maintenance.py --operation "$operation"
+}
+
 case "${1:-}" in
     --bg)
         submit_pipeline "bg"
@@ -225,6 +302,18 @@ case "${1:-}" in
     --schema)
         run_schema_evolution
         ;;
+    --gold)
+        run_gold_aggregations "${2:-all}"
+        ;;
+    --analytics)
+        run_analytics_queries "spark"
+        ;;
+    --trino-sql)
+        run_analytics_queries "trino"
+        ;;
+    --maintenance)
+        run_maintenance "${2:-all}"
+        ;;
     --stop)
         stop_pipeline
         ;;
@@ -240,6 +329,12 @@ case "${1:-}" in
         echo "    --hudi-bg     Submit Hudi streaming pipeline in background"
         echo "    --queries     Run Hudi query examples (upsert, time-travel, incremental)"
         echo "    --schema      Run schema evolution demo"
+        echo ""
+        echo "   (Gold layer & Analytics):"
+        echo "    --gold [mode]      Build Gold layer aggregations (all|daily|state|status|category)"
+        echo "    --analytics        Run BI analytics queries (Spark SQL)"
+        echo "    --trino-sql        Print Trino-compatible SQL queries"
+        echo "    --maintenance [op] Run Hudi maintenance (all|stats|clean|cluster|compact)"
         echo ""
         echo "  Common:"
         echo "    --dashboard   Run the quality dashboard (reads metrics from MinIO)"

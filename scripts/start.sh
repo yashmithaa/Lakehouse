@@ -43,9 +43,12 @@ wait_for_service() {
     return 0
 }
 
-wait_for_service "kafka"        90
-wait_for_service "minio"        30
-wait_for_service "spark-master" 60
+wait_for_service "kafka"          90
+wait_for_service "minio"          30
+wait_for_service "spark-master"   60
+wait_for_service "metastore-db"   30
+wait_for_service "hive-metastore" 120
+wait_for_service "trino"          90
 
 #  Create Kafka topic explicitly (idempotent)
 echo -e "\n${YELLOW}[3/3]${NC} Ensuring Kafka topic 'orders' exists…"
@@ -67,6 +70,8 @@ echo -e "  ${CYAN}MinIO API${NC}      → http://localhost:9000  (minioadmin / m
 echo -e "  ${CYAN}MinIO Console${NC}  → http://localhost:9001"
 echo -e "  ${CYAN}Spark Master${NC}   → http://localhost:8080"
 echo -e "  ${CYAN}Spark Worker${NC}   → http://localhost:8081"
+echo -e "  ${CYAN}Hive Metastore${NC} → thrift://localhost:9083"
+echo -e "  ${CYAN}Trino${NC}          → http://localhost:8085  (SQL analytics)"
 echo ""
 echo -e "  ${YELLOW}Next steps:${NC}"
 echo -e "    1. Download dataset:     ./scripts/download_dataset.sh"
@@ -79,4 +84,11 @@ echo -e "  ${YELLOW} Streaming pipeline (Kafka → Bronze + Silver + Quarantine)
 echo -e "    3b. ./scripts/submit_streaming.sh            # foreground"
 echo -e "    3b. ./scripts/submit_streaming.sh --bg       # background"
 echo -e "    4.  ./scripts/submit_streaming.sh --dashboard  # quality metrics"
+echo -e ""
+echo -e "  ${YELLOW} Gold layer & Analytics:${NC}"
+echo -e "    5.  ./scripts/submit_streaming.sh --gold       # build Gold tables"
+echo -e "    6.  ./scripts/submit_streaming.sh --analytics  # BI query suite"
+echo -e "    7.  ./scripts/submit_streaming.sh --maintenance # Hudi maintenance"
+echo -e "    8.  ./scripts/submit_streaming.sh --trino-sql  # Trino SQL queries"
+echo -e "    9.  docker exec -it lakehouse-trino trino      # Trino CLI"
 echo ""

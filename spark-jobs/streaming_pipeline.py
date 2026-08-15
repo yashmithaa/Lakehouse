@@ -114,7 +114,6 @@ def process_batch(batch_df: DataFrame, batch_id: int):
 
     #  Keep the latest event per order_id within this micro-batch using a
     #  window ranked by event_ts DESC.  This mirrors the upsert behavior
-    #  that Hudi will enforce in Week 3 (precombine on event_time).
     valid = checked.filter(F.col("is_valid") == True)  # noqa: E712
     valid_count = valid.count()
 
@@ -200,7 +199,7 @@ def main():
     _spark_ref = spark
 
     log.info("=" * 72)
-    log.info("  Week 2 — Streaming Pipeline: Kafka → Bronze + Silver + Quarantine")
+    log.info("Streaming Pipeline: Kafka → Bronze + Silver + Quarantine")
     log.info("=" * 72)
     log.info("  Kafka:      %s  /  topic: %s", KAFKA_BOOTSTRAP, KAFKA_TOPIC)
     log.info("  Bronze:     %s", BRONZE_PATH)

@@ -38,6 +38,7 @@ logs/
 
 # Checkpoints (generated at runtime)
 checkpoints/
-
+conf/
+*.conf
 # Spark event logs
 spark-events/

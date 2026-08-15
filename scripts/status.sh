@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# ─────────────────────────────────────────────────────────────────────────────
-# status.sh — Quick health check for all lakehouse services
-# ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,14 +32,16 @@ check_service() {
     fi
 }
 
-check_service "lakehouse-kafka"        "Kafka"
-check_service "lakehouse-minio"        "MinIO"
-check_service "lakehouse-spark-master" "Spark Master"
-check_service "lakehouse-spark-worker" "Spark Worker"
+check_service "lakehouse-kafka"          "Kafka"
+check_service "lakehouse-minio"          "MinIO"
+check_service "lakehouse-spark-master"   "Spark Master"
+check_service "lakehouse-spark-worker"   "Spark Worker"
+check_service "lakehouse-metastore-db"   "Metastore DB"
+check_service "lakehouse-hive-metastore" "Hive Metastore"
+check_service "lakehouse-trino"          "Trino"
 
 echo ""
 
-# ── Kafka topic info ─────────────────────────────────────────────────────────
 echo -e "  ${CYAN}Kafka topics:${NC}"
 docker exec lakehouse-kafka kafka-topics \
     --bootstrap-server localhost:9092 --list 2>/dev/null | while read -r topic; do

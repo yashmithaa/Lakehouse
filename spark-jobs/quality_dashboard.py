@@ -35,7 +35,13 @@ def main():
             .withColumn("total_records_int",      F.col("total_records").cast("int"))
             .withColumn("valid_records_int",      F.col("valid_records").cast("int"))
             .withColumn("quarantine_records_int", F.col("quarantine_records").cast("int"))
-            .withColumn("silver_records_int",     F.col("silver_records").cast("int"))
+            # Handle both Week 2 (silver_records) and Week 3 (silver_upserted) metrics
+            .withColumn("silver_records_int",
+                F.coalesce(
+                    F.col("silver_records").cast("int"),
+                    F.col("silver_upserted").cast("int"),
+                    F.lit(0),
+                ))
             .withColumn("duplicates_removed_int", F.col("duplicates_removed").cast("int"))
             .withColumn("valid_pct_dbl",          F.col("valid_pct").cast("double"))
             .withColumn("quarantine_pct_dbl",     F.col("quarantine_pct").cast("double"))
@@ -158,7 +164,6 @@ def main():
         except Exception:
             pass
 
-    if silver_read:
     if silver_read:
         (
             silver

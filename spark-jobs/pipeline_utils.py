@@ -49,8 +49,13 @@ SILVER_PATH      = "s3a://lakehouse/silver/orders/"
 QUARANTINE_PATH  = "s3a://lakehouse/bronze/quarantine/"
 METRICS_PATH     = "s3a://lakehouse/metrics/quality/"
 
-# Hudi Silver table path (ACID upserts — Week 3)
 HUDI_SILVER_PATH = "s3a://lakehouse/hudi/silver/orders/"
+
+GOLD_PATH                = "s3a://lakehouse/gold/"
+GOLD_DAILY_REVENUE_PATH  = "s3a://lakehouse/gold/daily_revenue/"
+GOLD_STATE_METRICS_PATH  = "s3a://lakehouse/gold/state_metrics/"
+GOLD_STATUS_FUNNEL_PATH  = "s3a://lakehouse/gold/status_funnel/"
+GOLD_CATEGORY_PATH       = "s3a://lakehouse/gold/category_performance/"
 
 # Checkpoint paths (separate bucket for clean lifecycle) 
 BRONZE_CHECKPOINT     = "s3a://lakehouse-checkpoints/bronze/orders/"
@@ -97,6 +102,15 @@ HUDI_COMMON_OPTS = {
 
     "hoodie.datasource.write.reconcile.schema":   "true",
     "hoodie.schema.on.read.enable":               "true",
+
+    "hoodie.datasource.hive_sync.enable":         "true",
+    "hoodie.datasource.hive_sync.mode":           "hms",
+    "hoodie.datasource.hive_sync.database":       "lakehouse_db",
+    "hoodie.datasource.hive_sync.table":          "orders_silver",
+    "hoodie.datasource.hive_sync.partition_fields": "customer_state",
+    "hoodie.datasource.hive_sync.partition_extractor_class":
+        "org.apache.hudi.hive.MultiPartKeysValueExtractor",
+    "hoodie.datasource.hive_sync.metastore.uris": "thrift://hive-metastore:9083",
 }
 
 HUDI_INCREMENTAL_OPTS = {
